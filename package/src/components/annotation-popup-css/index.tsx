@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import styles from "./styles.module.scss";
-import { IconTrash } from "../icons";
+import { IconTrash, IconDraw } from "../icons";
 import { originalSetTimeout } from "../../utils/freeze-animations";
 
 // =============================================================================
@@ -47,6 +47,12 @@ export interface AnnotationPopupCSSProps {
   onCancel: () => void;
   /** Called when delete button is clicked (only shown if provided) */
   onDelete?: () => void;
+  /** Called when draw button is clicked (only shown if provided — requires bounding box) */
+  onDrawClick?: () => void;
+  /** Whether drawing mode is currently active */
+  isDrawing?: boolean;
+  /** Whether a drawing has been added (shows indicator on draw button) */
+  hasDrawing?: boolean;
   /** Position styles (left, top) */
   style?: React.CSSProperties;
   /** Custom color for submit button and textarea focus (hex) */
@@ -80,6 +86,9 @@ export const AnnotationPopupCSS = forwardRef<AnnotationPopupCSSHandle, Annotatio
       onSubmit,
       onCancel,
       onDelete,
+      onDrawClick,
+      isDrawing,
+      hasDrawing,
       style,
       accentColor = "#3c82f7",
       isExiting = false,
@@ -274,6 +283,18 @@ export const AnnotationPopupCSS = forwardRef<AnnotationPopupCSSHandle, Annotatio
             <div className={styles.deleteWrapper}>
               <button className={styles.deleteButton} onClick={onDelete} type="button">
                 <IconTrash size={22} />
+              </button>
+            </div>
+          )}
+          {onDrawClick && (
+            <div className={styles.drawWrapper}>
+              <button
+                className={`${styles.drawButton} ${isDrawing ? styles.active : ""} ${hasDrawing ? styles.hasDrawing : ""}`}
+                onClick={onDrawClick}
+                type="button"
+                title={isDrawing ? "Stop drawing" : hasDrawing ? "Edit drawing" : "Draw on element"}
+              >
+                <IconDraw size={18} />
               </button>
             </div>
           )}

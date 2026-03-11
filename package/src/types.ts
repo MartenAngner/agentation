@@ -29,6 +29,11 @@ export type Annotation = {
     height: number;
   }>; // Individual bounding boxes for multi-select hover highlighting
 
+  /** Drawing strokes on this element (from draw-on-element feature) */
+  strokes?: DrawStroke[];
+  /** Base64 PNG data URL of the drawing overlay */
+  drawingImage?: string;
+
   // Protocol fields (added when syncing to server)
   sessionId?: string;
   url?: string;
@@ -49,6 +54,27 @@ export type Annotation = {
 // -----------------------------------------------------------------------------
 // Annotation Enums
 // -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// Drawing Strokes
+// -----------------------------------------------------------------------------
+
+export type DrawStroke = {
+  type: "free" | "arrow" | "rect";
+  color: string;
+  size: number;
+  /** Freehand points [[x, y], ...] — relative to element bounding box */
+  points?: number[][];
+  /** Arrow start [x, y] */
+  from?: number[];
+  /** Arrow end [x, y] */
+  to?: number[];
+  /** Rectangle bounds */
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+};
 
 export type AnnotationIntent = "fix" | "change" | "question" | "approve";
 export type AnnotationSeverity = "blocking" | "important" | "suggestion";

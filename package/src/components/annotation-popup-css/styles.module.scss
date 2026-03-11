@@ -322,6 +322,47 @@ $green: #34c759;
     }
 }
 
+// Draw button — bottom-left of popup, pushes Cancel/Add to the right
+.drawWrapper {
+    margin-right: auto;
+}
+
+.drawButton {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.4);
+    transition:
+        background-color 0.15s ease,
+        color 0.15s ease,
+        transform 0.1s ease;
+
+    &:hover {
+        background: rgba($blue, 0.2);
+        color: $blue;
+    }
+
+    &:active {
+        transform: scale(0.92);
+    }
+
+    &.active {
+        color: #fff;
+        background: $blue;
+    }
+
+    &.hasDrawing {
+        color: $blue;
+        background: rgba($blue, 0.15);
+    }
+}
+
 // Delete button wrapper
 .deleteWrapper {
     margin-right: auto;
@@ -427,6 +468,25 @@ $green: #34c759;
         &:hover {
             background: rgba(255, 59, 48, 0.15);
             color: #ff3b30;
+        }
+    }
+
+    .drawButton {
+        color: rgba(0, 0, 0, 0.4);
+
+        &:hover {
+            background: rgba($blue, 0.1);
+            color: $blue;
+        }
+
+        &.active {
+            color: #fff;
+            background: $blue;
+        }
+
+        &.hasDrawing {
+            color: $blue;
+            background: rgba($blue, 0.1);
         }
     }
 }

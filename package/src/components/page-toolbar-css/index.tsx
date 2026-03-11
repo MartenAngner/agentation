@@ -7,6 +7,7 @@ import {
   AnnotationPopupCSS,
   AnnotationPopupCSSHandle,
 } from "../annotation-popup-css";
+import { DrawCanvas } from "../draw-canvas";
 import {
   IconListSparkle,
   IconPlayAlt,
@@ -84,7 +85,7 @@ import {
   originalSetInterval,
 } from "../../utils/freeze-animations";
 
-import type { Annotation } from "../../types";
+import type { Annotation, DrawStroke } from "../../types";
 import styles from "./styles.module.scss";
 
 /**
@@ -384,7 +385,14 @@ function generateOutput(
       if (a.reactComponents) {
         output += `**React:** ${a.reactComponents}\n`;
       }
-      output += `**Feedback:** ${a.comment}\n\n`;
+      output += `**Feedback:** ${a.comment}\n`;
+      if (a.strokes && a.strokes.length > 0) {
+        output += `**Drawing:** ${a.strokes.length} stroke(s) — ${JSON.stringify(a.strokes)}\n`;
+      }
+      if (a.drawingImage) {
+        output += `**Drawing Image:** ![annotation](${a.drawingImage})\n`;
+      }
+      output += "\n";
     } else {
       // Standard and detailed modes
       output += `### ${i + 1}. ${a.element}\n`;
@@ -417,7 +425,14 @@ function generateOutput(
         output += `**Context:** ${a.nearbyText.slice(0, 100)}\n`;
       }
 
-      output += `**Feedback:** ${a.comment}\n\n`;
+      output += `**Feedback:** ${a.comment}\n`;
+      if (a.strokes && a.strokes.length > 0) {
+        output += `**Drawing:** ${a.strokes.length} stroke(s) — ${JSON.stringify(a.strokes)}\n`;
+      }
+      if (a.drawingImage) {
+        output += `**Drawing Image:** ![annotation](${a.drawingImage})\n`;
+      }
+      output += "\n";
     }
   });
 
@@ -549,7 +564,12 @@ export function PageFeedbackToolbarCSS({
     multiSelectElements?: HTMLElement[];
     // Element reference for single-select (for live position queries)
     targetElement?: HTMLElement;
+    // Drawing data (from draw-on-element feature)
+    strokes?: DrawStroke[];
+    drawingImage?: string;
   } | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const currentDrawStrokesRef = useRef<import("../draw-canvas").DrawStroke[]>([]);
   const [copied, setCopied] = useState(false);
   const [sendState, setSendState] = useState<
     "idle" | "sending" | "sent" | "failed"
@@ -2317,6 +2337,8 @@ export function PageFeedbackToolbarCSS({
         reactComponents: pendingAnnotation.reactComponents,
         sourceFile: pendingAnnotation.sourceFile,
         elementBoundingBoxes: pendingAnnotation.elementBoundingBoxes,
+        strokes: pendingAnnotation.strokes,
+        drawingImage: pendingAnnotation.drawingImage,
         // Protocol fields for server sync
         ...(endpoint && currentSessionId
           ? {
@@ -2346,6 +2368,7 @@ export function PageFeedbackToolbarCSS({
       fireWebhook("annotation.add", { annotation: newAnnotation });
 
       // Animate out the pending annotation UI
+      setIsDrawing(false);
       setPendingExiting(true);
       originalSetTimeout(() => {
         setPendingAnnotation(null);
@@ -2392,6 +2415,7 @@ export function PageFeedbackToolbarCSS({
 
   // Cancel annotation with exit animation
   const cancelAnnotation = useCallback(() => {
+    setIsDrawing(false);
     setPendingExiting(true);
     originalSetTimeout(() => {
       setPendingAnnotation(null);
@@ -4230,43 +4254,113 @@ export function PageFeedbackToolbarCSS({
                       <IconPlus size={12} />
                     </div>
 
-                    <AnnotationPopupCSS
-                      ref={popupRef}
-                      element={pendingAnnotation.element}
-                      selectedText={pendingAnnotation.selectedText}
-                      computedStyles={pendingAnnotation.computedStylesObj}
-                      placeholder={
-                        pendingAnnotation.element === "Area selection"
-                          ? "What should change in this area?"
-                          : pendingAnnotation.isMultiSelect
-                            ? "Feedback for this group of elements..."
-                            : "What should change?"
-                      }
-                      onSubmit={addAnnotation}
-                      onCancel={cancelAnnotation}
-                      isExiting={pendingExiting}
-                      lightMode={!isDarkMode}
-                      accentColor={
-                        pendingAnnotation.isMultiSelect
-                          ? "#34C759"
-                          : settings.annotationColor
-                      }
-                      style={{
-                        // Popup is 280px wide, centered with translateX(-50%), so 140px each side
-                        // Clamp so popup stays 20px from viewport edges
-                        left: Math.max(
-                          160,
-                          Math.min(
-                            window.innerWidth - 160,
-                            (markerX / 100) * window.innerWidth,
+                    {/* Draw canvas — shown when user clicks draw button in popup */}
+                    {isDrawing && pendingAnnotation.boundingBox && !pendingExiting && (
+                      <DrawCanvas
+                        boundingBox={(() => {
+                          // Use live bounding box from target element when available
+                          if (pendingAnnotation.targetElement && document.contains(pendingAnnotation.targetElement)) {
+                            const rect = pendingAnnotation.targetElement.getBoundingClientRect();
+                            return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+                          }
+                          // Fallback to stored bounding box (adjusted for scroll)
+                          return {
+                            x: pendingAnnotation.boundingBox!.x,
+                            y: pendingAnnotation.boundingBox!.y - scrollY,
+                            width: pendingAnnotation.boundingBox!.width,
+                            height: pendingAnnotation.boundingBox!.height,
+                          };
+                        })()}
+                        accentColor={pendingAnnotation.isMultiSelect ? "#34C759" : settings.annotationColor}
+                        initialStrokes={pendingAnnotation.strokes || []}
+                        lightMode={!isDarkMode}
+                        onStrokesChange={(s) => { currentDrawStrokesRef.current = s; }}
+                        onDone={(strokes, imageDataUrl) => {
+                          setPendingAnnotation((prev) =>
+                            prev ? { ...prev, strokes, drawingImage: imageDataUrl || undefined } : prev
+                          );
+                          setIsDrawing(false);
+                        }}
+                        onCancel={() => {
+                          setIsDrawing(false);
+                        }}
+                      />
+                    )}
+
+                    {/* Annotation popup — always visible */}
+                    {(
+                      <AnnotationPopupCSS
+                        ref={popupRef}
+                        element={pendingAnnotation.element}
+                        selectedText={pendingAnnotation.selectedText}
+                        computedStyles={pendingAnnotation.computedStylesObj}
+                        placeholder={
+                          pendingAnnotation.element === "Area selection"
+                            ? "What should change in this area?"
+                            : pendingAnnotation.isMultiSelect
+                              ? "Feedback for this group of elements..."
+                              : "What should change?"
+                        }
+                        onSubmit={addAnnotation}
+                        onCancel={cancelAnnotation}
+                        isExiting={pendingExiting}
+                        lightMode={!isDarkMode}
+                        accentColor={
+                          pendingAnnotation.isMultiSelect
+                            ? "#34C759"
+                            : settings.annotationColor
+                        }
+                        onDrawClick={pendingAnnotation.boundingBox ? () => {
+                          if (isDrawing) {
+                            // Toggling off — check if there are strokes to save
+                            const strokes = currentDrawStrokesRef.current;
+                            if (strokes.length > 0) {
+                              const save = window.confirm("Save your drawing?");
+                              if (save) {
+                                // Get the canvas image
+                                const canvas = document.querySelector('canvas[data-feedback-toolbar]') as HTMLCanvasElement | null;
+                                const imageDataUrl = canvas ? canvas.toDataURL("image/png") : undefined;
+                                setPendingAnnotation((prev) =>
+                                  prev ? { ...prev, strokes, drawingImage: imageDataUrl || undefined } : prev
+                                );
+                              } else {
+                                setPendingAnnotation((prev) =>
+                                  prev ? { ...prev, strokes: undefined, drawingImage: undefined } : prev
+                                );
+                              }
+                            }
+                            currentDrawStrokesRef.current = [];
+                            setIsDrawing(false);
+                          } else {
+                            setIsDrawing(true);
+                          }
+                        } : undefined}
+                        isDrawing={isDrawing}
+                        hasDrawing={!!(pendingAnnotation.strokes && pendingAnnotation.strokes.length > 0)}
+                        style={{
+                          // Popup is 280px wide, centered with translateX(-50%), so 140px each side
+                          // Clamp so popup stays 20px from viewport edges
+                          left: Math.max(
+                            160,
+                            Math.min(
+                              window.innerWidth - 160,
+                              (markerX / 100) * window.innerWidth,
+                            ),
                           ),
-                        ),
-                        // Position popup above or below marker to keep marker visible
-                        ...(markerY > window.innerHeight - 290
-                          ? { bottom: window.innerHeight - markerY + 20 }
-                          : { top: markerY + 20 }),
-                      }}
-                    />
+                          // Position popup below the bounding box when it exists, otherwise use marker
+                          ...(pendingAnnotation.boundingBox
+                            ? {
+                                top: Math.min(
+                                  window.innerHeight - 200,
+                                  (pendingAnnotation.boundingBox.y - scrollY) + pendingAnnotation.boundingBox.height + 16,
+                                ),
+                              }
+                            : markerY > window.innerHeight - 290
+                              ? { bottom: window.innerHeight - markerY + 20 }
+                              : { top: markerY + 20 }),
+                        }}
+                      />
+                    )}
                   </>
                 );
               })()}
